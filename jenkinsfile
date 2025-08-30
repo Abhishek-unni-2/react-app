@@ -1,0 +1,41 @@
+pipeline {
+    agent any
+    tools {
+        nodejs 'Node18'
+    }
+    environment {
+        WEB_IP = 'YOUR_WEB_SERVER_IP'
+        SSH_CRED = 'deploy-ec2-key'
+    }
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+        stage('Install dependencies') {
+            steps { sh 'npm ci || npm install' }
+        }
+        stage('Build React App') {
+            steps { sh 'npm run build' }
+        }
+        stage('Package Build') {
+            steps {
+                sh 'tar -czf build.tar.gz -C build .'
+                archiveArtifacts artifacts: 'build.tar.gz'
+            }
+        }
+        stage('Deploy to EC2') {
+            steps {
+                sshagent(credentials: [env.SSH_CRED]) {
+                    sh '''
+                    scp -o StrictHostKeyChecking=no build.tar.gz ubuntu@${WEB_IP}:/tmp/build.tar.gz
+                    ssh -o StrictHostKeyChecking=no ubuntu@${WEB_IP} '
+                      sudo rm -rf /var/www/reactapp/*;
+                      sudo tar -xzf /tmp/build.tar.gz -C /var/www/reactapp;
+                      sudo systemctl reload nginx
+                    '
+                    '''
+                }
+            }
+        }
+    }
+}
