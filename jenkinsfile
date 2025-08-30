@@ -27,8 +27,9 @@ pipeline {
             steps {
                 sshagent(credentials: [env.SSH_CRED]) {
                     sh '''
-                    scp -o StrictHostKeyChecking=no build.tar.gz ubuntu@${3.89.108.191}:/tmp/build.tar.gz
-                    ssh -o StrictHostKeyChecking=no ubuntu@${3.89.108.191} '
+                    #!/bin/bash
+                      scp -o StrictHostKeyChecking=no build.tar.gz ubuntu@${3.89.108.191}:/tmp/build.tar.gz
+                      ssh -o StrictHostKeyChecking=no ubuntu@${3.89.108.191} '
                       sudo rm -rf /var/www/reactapp/*;
                       sudo tar -xzf /tmp/build.tar.gz -C /var/www/reactapp;
                       sudo systemctl reload nginx
