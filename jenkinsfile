@@ -1,15 +1,18 @@
 pipeline {
     agent any
+    tools {
+        nodejs "nodejs-lts"  // use the NodeJS installation you configured
+    }
     environment {
         DOCKER_CRED = 'docker-hub-cred'
         SSH_CRED = 'deploy-ec2-key'
-        EC2_IP = '174.129.104.129'
+        EC2_IP = '174.129.104.129'   // your web server
         APP_NAME = 'reactapp'
         DOCKER_IMAGE = 'abhishek0225/my-react-app:latest'
     }
     stages {
         stage('Checkout') { steps { checkout scm } }
-        stage('Install Dependencies') { steps { sh 'npm ci || npm install' } }
+        stage('Install Dependencies') { steps { sh 'npm ci' } }
         stage('Build React App') { steps { sh 'npm run build' } }
         stage('Build Docker Image') { steps { sh 'docker build -t $DOCKER_IMAGE .' } }
         stage('Push Docker Image') {
