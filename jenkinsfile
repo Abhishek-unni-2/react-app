@@ -1,37 +1,44 @@
 pipeline {
     agent any
-    tools {
-        nodejs 'Node18'
-    }
     environment {
-        WEB_IP = '3.89.108.191'
+        DOCKER_CRED = 'docker-hub-cred'
         SSH_CRED = 'deploy-ec2-key'
+        EC2_IP = '3.89.108.191'
+        APP_NAME = 'reactapp'
+        DOCKER_IMAGE = 'abhishek0225/my-react-app:latest'
     }
     stages {
         stage('Checkout') {
             steps { checkout scm }
         }
-        stage('Install dependencies') {
+        stage('Install Dependencies') {
             steps { sh 'npm ci || npm install' }
         }
         stage('Build React App') {
             steps { sh 'npm run build' }
         }
-        stage('Package Build') {
+        stage('Build Docker Image') {
             steps {
-                sh 'tar -czf build.tar.gz -C build .'
-                archiveArtifacts artifacts: 'build.tar.gz'
+                sh 'docker build -t $DOCKER_IMAGE .'
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                withDockerRegistry([credentialsId: "$DOCKER_CRED", url: '']) {
+                    sh 'docker push $DOCKER_IMAGE'
+                }
             }
         }
         stage('Deploy to EC2') {
             steps {
                 sshagent(credentials: [env.SSH_CRED]) {
                     sh """
-                        scp -o StrictHostKeyChecking=no build.tar.gz ubuntu@${WEB_IP}:/tmp/build.tar.gz
-                        ssh -o StrictHostKeyChecking=no ubuntu@${WEB_IP} \\
-                        "sudo rm -rf /var/www/reactapp/*;
-                         sudo tar -xzf /tmp/build.tar.gz -C /var/www/reactapp;
-                         sudo systemctl reload nginx"
+                    ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} '
+                        docker pull $DOCKER_IMAGE;
+                        docker stop $APP_NAME || true;
+                        docker rm $APP_NAME || true;
+                        docker run -d --name $APP_NAME -p 80:80 $DOCKER_IMAGE
+                    '
                     """
                 }
             }
