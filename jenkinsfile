@@ -1,40 +1,69 @@
 pipeline {
     agent any
+
     tools {
-        nodejs "nodejs-lts"  // use the NodeJS installation you configured
+        nodejs 'Node18' // Name of NodeJS installation in Jenkins
+        dockerTool 'docker' // Docker tool configured in Jenkins (optional)
     }
+
     environment {
-        DOCKER_CRED = 'docker-hub-cred'
-        SSH_CRED = 'deploy-ec2-key'
-        EC2_IP = '174.129.104.129'   // your web server
-        APP_NAME = 'reactapp'
+        WEB_IP = '174.129.104.129'             // Your web server EC2 public IP
+        SSH_CRED = 'deploy-ec2-key'           // Jenkins SSH key credential ID
         DOCKER_IMAGE = 'abhishek0225/my-react-app:latest'
+        CONTAINER_NAME = 'reactapp'
     }
+
     stages {
-        stage('Checkout') { steps { checkout scm } }
-        stage('Install Dependencies') { steps { sh 'npm ci' } }
-        stage('Build React App') { steps { sh 'npm run build' } }
-        stage('Build Docker Image') { steps { sh 'docker build -t $DOCKER_IMAGE .' } }
-        stage('Push Docker Image') {
+        stage('Checkout') {
             steps {
-                withDockerRegistry([credentialsId: "$DOCKER_CRED", url: '']) {
-                    sh 'docker push $DOCKER_IMAGE'
-                }
+                checkout scm
             }
         }
-        stage('Deploy to Web Server') {
+
+        stage('Install dependencies') {
+            steps {
+                sh 'npm ci || npm install'
+            }
+        }
+
+        stage('Build React App') {
+            steps {
+                sh 'npm run build'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                    docker build -t ${DOCKER_IMAGE} .
+                    docker push ${DOCKER_IMAGE}
+                """
+            }
+        }
+
+        stage('Deploy to EC2') {
             steps {
                 sshagent(credentials: [env.SSH_CRED]) {
                     sh """
-                    ssh -o StrictHostKeyChecking=no ubuntu@${EC2_IP} '
-                        docker pull $DOCKER_IMAGE;
-                        docker stop $APP_NAME || true;
-                        docker rm $APP_NAME || true;
-                        docker run -d --name $APP_NAME -p 80:80 $DOCKER_IMAGE
+                    ssh -o StrictHostKeyChecking=no ubuntu@${WEB_IP} '
+                      docker pull ${DOCKER_IMAGE};
+                      docker stop ${CONTAINER_NAME} || true;
+                      docker rm ${CONTAINER_NAME} || true;
+                      docker run -d --name ${CONTAINER_NAME} -p 3000:80 ${DOCKER_IMAGE};
+                      sudo systemctl reload nginx
                     '
                     """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment completed successfully!'
+        }
+        failure {
+            echo 'Deployment failed. Check the logs.'
         }
     }
 }
