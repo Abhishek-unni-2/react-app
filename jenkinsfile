@@ -2,42 +2,39 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'Node18' // Name of NodeJS installation in Jenkins
-        dockerTool 'docker' // Docker tool configured in Jenkins (optional)
+        nodejs 'Node18'
     }
 
     environment {
-        WEB_IP = '174.129.104.129'             // Your web server EC2 public IP
-        SSH_CRED = 'deploy-ec2-key'           // Jenkins SSH key credential ID
+        WEB_IP = '13.219.91.69'
+        SSH_CRED = 'deploy-ec2-key'
         DOCKER_IMAGE = 'abhishek0225/my-react-app:latest'
         CONTAINER_NAME = 'reactapp'
     }
 
     stages {
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
         stage('Install dependencies') {
-            steps {
-                sh 'npm ci || npm install'
-            }
+            steps { sh 'npm ci || npm install' }
         }
 
         stage('Build React App') {
-            steps {
-                sh 'npm run build'
-            }
+            steps { sh 'npm run build' }
         }
 
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
-                sh """
-                    docker build -t ${DOCKER_IMAGE} .
-                    docker push ${DOCKER_IMAGE}
-                """
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker build -t ${DOCKER_IMAGE} .
+                        docker push ${DOCKER_IMAGE}
+                    """
+                }
             }
         }
 
@@ -49,8 +46,7 @@ pipeline {
                       docker pull ${DOCKER_IMAGE};
                       docker stop ${CONTAINER_NAME} || true;
                       docker rm ${CONTAINER_NAME} || true;
-                      docker run -d --name ${CONTAINER_NAME} -p 3000:80 ${DOCKER_IMAGE};
-                      sudo systemctl reload nginx
+                      docker run -d --name ${CONTAINER_NAME} -p 80:80 ${DOCKER_IMAGE};
                     '
                     """
                 }
@@ -59,11 +55,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo 'Deployment completed successfully!'
-        }
-        failure {
-            echo 'Deployment failed. Check the logs.'
-        }
+        success { echo '✅ Deployment completed successfully!' }
+        failure { echo '❌ Deployment failed. Check the logs.' }
     }
 }
